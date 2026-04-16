@@ -58,19 +58,13 @@ def resolve_config_path() -> Path:
 
     Resolution order:
       1. $HERMES_HOME/honcho.json      (profile-local, if it exists)
-      2. ~/.hermes/honcho.json          (default profile — shared host blocks live here)
-      3. ~/.honcho/config.json          (global, cross-app interop)
+      2. ~/.honcho/config.json          (global, cross-app interop)
 
     Returns the global path if none exist (for first-time setup writes).
     """
     local_path = get_hermes_home() / "honcho.json"
     if local_path.exists():
         return local_path
-
-    # Default profile's config — host blocks accumulate here via setup/clone
-    default_path = Path.home() / ".hermes" / "honcho.json"
-    if default_path != local_path and default_path.exists():
-        return default_path
 
     return GLOBAL_CONFIG_PATH
 
@@ -189,6 +183,11 @@ class HonchoClientConfig:
     # "context" — auto-injected context only, Honcho tools removed
     # "tools"   — Honcho tools only, no auto-injected context
     recall_mode: str = "hybrid"
+    # When True and recallMode is "tools", create the Honcho session eagerly
+    # during initialize() instead of deferring to the first tool call.
+    # This ensures sync_turn() can write from the very first turn.
+    # Does NOT enable automatic context injection — only changes init timing.
+    init_on_session_start: bool = False
     # Observation mode: legacy string shorthand ("directional" or "unified").
     # Kept for backward compat; granular per-peer booleans below are preferred.
     observation_mode: str = "directional"
@@ -365,6 +364,11 @@ class HonchoClientConfig:
                 host_block.get("recallMode")
                 or raw.get("recallMode")
                 or "hybrid"
+            ),
+            init_on_session_start=_resolve_bool(
+                host_block.get("initOnSessionStart"),
+                raw.get("initOnSessionStart"),
+                default=False,
             ),
             # Migration guard: existing configs without an explicit
             # observationMode keep the old "unified" default so users
